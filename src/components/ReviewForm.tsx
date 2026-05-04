@@ -184,6 +184,7 @@ export function ReviewForm({ onClose }: Props) {
 }
 
 // ── Modal wrapper ──────────────────────────────────────────────
+// Using key={isOpen} forces full remount on each open — resets all form state cleanly
 export function ReviewModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   if (!isOpen) return null;
 
@@ -191,7 +192,7 @@ export function ReviewModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(8px)" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="relative w-full max-w-lg rounded-3xl p-7 max-h-[90vh] overflow-y-auto"
+      <div key={String(isOpen)} className="relative w-full max-w-lg rounded-3xl p-7 max-h-[90vh] overflow-y-auto"
         style={{ background: "#111111", border: "1px solid rgba(212,175,55,0.2)", boxShadow: "0 32px 80px rgba(0,0,0,0.7)" }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

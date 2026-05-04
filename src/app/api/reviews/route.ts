@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit, getClientIp } from "@/lib/rateLimit";
+import { sanitize } from "@/lib/sanitize";
 
 const URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+const VALID_SERVICES = ["sell-gold", "loan-release", "doorstep", "general"];
 
 // ── GET: fetch approved reviews ──────────────────────────────
 export async function GET() {
@@ -13,16 +17,14 @@ export async function GET() {
         headers: {
           apikey: KEY,
           Authorization: `Bearer ${KEY}`,
-          "Content-Type": "application/json",
         },
-        next: { revalidate: 60 }, // cache 60s
+        next: { revalidate: 60 },
       }
     );
 
     if (!res.ok) {
-      const err = await res.text();
-      console.error("[reviews GET]", err);
-      return NextResponse.json([], { status: 200 }); // return empty rather than error
+      console.error("[reviews GET] HTTP", res.status);
+      return NextResponse.json([], { status: 200 });
     }
 
     const data = await res.json();
@@ -38,26 +40,45 @@ export async function GET() {
 // ── POST: submit a new review ────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 3 reviews per minute per IP
+    const ip = getClientIp(req);
+    const { ok: allowed } = rateLimit(`review:${ip}`, 3);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many submissions. Please wait a minute." },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
-    const { name, location, rating, service, review_text, honeypot } = body;
+    const { honeypot } = body;
 
     // Spam check
     if (honeypot) return NextResponse.json({ success: true });
 
+    // Sanitize inputs
+    const name        = sanitize(body.name        || "", 100);
+    const location    = sanitize(body.location    || "", 100);
+    const review_text = sanitize(body.review_text || "", 1000);
+    const service     = sanitize(body.service     || "", 50);
+    const rating      = Number(body.rating);
+
     // Validate
-    if (!name?.trim() || !review_text?.trim() || !service) {
-      return NextResponse.json({ error: "Name, service and review are required" }, { status: 400 });
+    if (!name) {
+      return NextResponse.json({ error: "Name is required." }, { status: 400 });
+    }
+    if (!review_text || review_text.length < 10) {
+      return NextResponse.json({ error: "Review must be at least 10 characters." }, { status: 400 });
     }
     if (!rating || rating < 1 || rating > 5) {
-      return NextResponse.json({ error: "Rating must be 1–5" }, { status: 400 });
+      return NextResponse.json({ error: "Rating must be between 1 and 5." }, { status: 400 });
     }
-    if (review_text.trim().length < 10) {
-      return NextResponse.json({ error: "Review must be at least 10 characters" }, { status: 400 });
+    if (!VALID_SERVICES.includes(service)) {
+      return NextResponse.json({ error: "Invalid service selected." }, { status: 400 });
     }
 
-    console.log("[REVIEW]", new Date().toISOString(), name, rating, "★");
+    console.log("[REVIEW]", new Date().toISOString(), { name, rating });
 
-    // Save to Supabase — use anon key so RLS INSERT policy applies
     const res = await fetch(`${URL}/rest/v1/reviews`, {
       method: "POST",
       headers: {
@@ -67,12 +88,12 @@ export async function POST(req: NextRequest) {
         Prefer: "return=minimal",
       },
       body: JSON.stringify({
-        name: name.trim(),
-        location: (location || "").trim(),
-        rating: Number(rating),
+        name,
+        location,
+        rating,
         service,
-        review_text: review_text.trim(),
-        status: "pending", // admin must approve in Supabase dashboard
+        review_text,
+        status: "pending",
       }),
     });
 
@@ -83,7 +104,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Thank you for your review! It will appear after approval.",
+      message: "Thank you! Your review will appear after approval.",
     });
   } catch (e) {
     console.error("[review POST]", e);

@@ -37,9 +37,11 @@ export function TestimonialsSection() {
     fetch("/api/reviews")
       .then(r => r.json())
       .then((data: Review[]) => {
-        setReviews(Array.isArray(data) ? data : []);
+        const valid = Array.isArray(data) ? data : [];
+        setReviews(valid);
+        setIdx(0); // reset carousel index when reviews reload
       })
-      .catch(() => setReviews([]))
+      .catch(() => { setReviews([]); setIdx(0); })
       .finally(() => setLoading(false));
   }, []);
 

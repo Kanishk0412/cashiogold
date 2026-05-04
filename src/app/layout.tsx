@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
-import { Navbar } from "@/components/Navbar";
-import { Footer } from "@/components/Footer";
+import { Navbar }        from "@/components/Navbar";
+import { Footer }        from "@/components/Footer";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
-import { Toaster } from "@/components/ui/Toaster";
+import { Toaster }       from "@/components/ui/Toaster";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -85,11 +86,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="antialiased bg-[#0A0A0A] text-white overflow-x-hidden">
-        <Navbar />
-        <main className="min-h-screen">{children}</main>
-        <Footer />
-        <WhatsAppButton />
-        <Toaster />
+        <ErrorBoundary>
+          <Navbar />
+          <main className="min-h-screen">{children}</main>
+          <Footer />
+          <WhatsAppButton />
+          <Toaster />
+        </ErrorBoundary>
       </body>
     </html>
   );
