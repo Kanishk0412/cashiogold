@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit, getClientIp } from "@/lib/rateLimit";
+import { sanitize, sanitizePhone } from "@/lib/sanitize";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY =
@@ -58,40 +60,54 @@ async function sendToGoogleSheets(data: Payload) {
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 5 submissions per minute per IP
+    const ip = getClientIp(req);
+    const { ok: allowed } = rateLimit(ip, 5);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait a minute and try again." },
+        { status: 429 }
+      );
+    }
+
     const body: Payload = await req.json();
 
     // Honeypot spam check
     if (body.honeypot) return NextResponse.json({ success: true });
 
-    // Validate required fields
-    const required = ["name", "phone", "email", "city", "service", "message"] as const;
-    for (const field of required) {
-      if (!body[field]?.trim()) {
-        return NextResponse.json({ error: `${field} is required` }, { status: 400 });
-      }
+    // Sanitize all inputs
+    const name    = sanitize(body.name    || "", 100);
+    const phone   = sanitizePhone(body.phone || "");
+    const email   = sanitize(body.email   || "", 200);
+    const city    = sanitize(body.city    || "", 100);
+    const service = sanitize(body.service || "", 50);
+    const message = sanitize(body.message || "", 2000);
+
+    // Validate
+    if (!name || !phone || !email || !city || !service || !message) {
+      return NextResponse.json({ error: "All fields are required." }, { status: 400 });
     }
-    if (!/^[6-9]\d{9}$/.test(body.phone)) {
-      return NextResponse.json({ error: "Invalid phone number" }, { status: 400 });
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      return NextResponse.json({ error: "Invalid phone number." }, { status: 400 });
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
-      return NextResponse.json({ error: "Invalid email" }, { status: 400 });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ error: "Invalid email address." }, { status: 400 });
+    }
+    if (!["sell-gold", "loan-release", "general"].includes(service)) {
+      return NextResponse.json({ error: "Invalid service selected." }, { status: 400 });
     }
 
-    // Always log to server console as a backup record
-    console.log("[LEAD]", new Date().toISOString(), JSON.stringify({
-      name: body.name, phone: body.phone, email: body.email,
-      city: body.city, service: body.service,
-    }));
+    // Log as backup record (server-side only)
+    console.log("[LEAD]", new Date().toISOString(), { name, phone, city, service });
+
+    const sanitized: Payload = { name, phone, email, city, service, message };
 
     // Save to Supabase
-    const result = await saveToSupabase(body);
-    if (!result.ok) {
-      console.error("[Supabase error]", result.error);
-      // Still return success to the user — lead is logged above
-    }
+    const result = await saveToSupabase(sanitized);
+    if (!result.ok) console.error("[Supabase error]", result.error);
 
     // Sync to Google Sheets (fire-and-forget)
-    sendToGoogleSheets(body);
+    sendToGoogleSheets(sanitized);
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
