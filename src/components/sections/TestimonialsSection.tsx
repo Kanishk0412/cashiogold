@@ -23,16 +23,6 @@ const SERVICE_LABELS: Record<string, string> = {
 
 const VISIBLE = 3;
 
-// Fallback reviews shown while loading or if API fails
-const FALLBACK: Review[] = [
-  { id: "1", name: "Priya Sharma",  location: "Mumbai",    rating: 5, service: "sell-gold",    review_text: "Cashiogold gave me the best price for my old jewellery. The process was transparent and I got paid within minutes. Highly recommended!", created_at: "" },
-  { id: "2", name: "Rajesh Kumar",  location: "Delhi NCR", rating: 5, service: "loan-release", review_text: "Had pledged gold with an NBFC and was struggling to release it. Cashiogold handled everything — my gold was back in 48 hours!", created_at: "" },
-  { id: "3", name: "Anita Patel",   location: "Ahmedabad", rating: 5, service: "sell-gold",    review_text: "The doorstep service was fantastic. They came home, tested professionally, offered a fair price, and transferred money within the hour. 10/10!", created_at: "" },
-  { id: "4", name: "Suresh Nair",   location: "Chennai",   rating: 5, service: "sell-gold",    review_text: "Cashiogold offered 7% more than local jewellers. Seeing the live gold rate on their calculator before visiting gave me confidence!", created_at: "" },
-  { id: "5", name: "Meena Joshi",   location: "Pune",      rating: 5, service: "sell-gold",    review_text: "Fast, professional, and honest. I had old gold bars from my grandmother. The team valued them correctly. Best rate in market!", created_at: "" },
-  { id: "6", name: "Vikram Singh",  location: "Jaipur",    rating: 5, service: "loan-release", review_text: "Needed to release gold pledged with SBI urgently. Cashiogold sorted it in 24 hours — faster than expected. No hidden charges!", created_at: "" },
-];
-
 function initials(name: string) {
   return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
@@ -47,13 +37,13 @@ export function TestimonialsSection() {
     fetch("/api/reviews")
       .then(r => r.json())
       .then((data: Review[]) => {
-        setReviews(Array.isArray(data) && data.length > 0 ? data : FALLBACK);
+        setReviews(Array.isArray(data) ? data : []);
       })
-      .catch(() => setReviews(FALLBACK))
+      .catch(() => setReviews([]))
       .finally(() => setLoading(false));
   }, []);
 
-  const list    = loading ? FALLBACK : reviews;
+  const list    = reviews;
   const maxIdx  = Math.max(0, list.length - VISIBLE);
   const visible = list.slice(idx, idx + VISIBLE);
 
@@ -119,14 +109,34 @@ export function TestimonialsSection() {
 
         {/* Loading state */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 py-8 text-gray-500">
+          <div className="flex items-center justify-center gap-2 py-16 text-gray-500">
             <Loader2 size={18} className="animate-spin text-[#D4AF37]" />
             <span className="text-sm">Loading reviews...</span>
           </div>
         )}
 
+        {/* Empty state */}
+        {!loading && list.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5"
+              style={{ background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.15)" }}>
+              <Star size={28} style={{ color: "#D4AF37" }} />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">No Reviews Yet</h3>
+            <p className="text-gray-500 text-sm max-w-xs mb-6">
+              Be the first to share your experience with Cashiogold!
+            </p>
+            <button onClick={() => setModalOpen(true)}
+              className="btn-shine inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm text-black"
+              style={{ background: "linear-gradient(135deg, #D4AF37, #F4D03F, #B8860B)" }}>
+              <PenLine size={15} />
+              Write the First Review
+            </button>
+          </div>
+        )}
+
         {/* Review cards */}
-        {!loading && (
+        {!loading && list.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {visible.map((r) => (
               <div key={r.id} className="flex flex-col p-6 rounded-3xl"
